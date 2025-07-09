@@ -37,8 +37,19 @@ def load_trajectories(trajectory_dir):
         states = data['states']  
         actions = data['actions']  
         
+        # Process states: stack 4 frames and transpose to (channels, height, width)
+        processed_states = []
+        for state_sequence in states:
+            # state_sequence shape: (4, 96, 96, 3)
+            # Stack along channel dimension: (96, 96, 12)
+            stacked = np.concatenate(state_sequence, axis=-1)
+            # Transpose to (12, 96, 96) for PyTorch
+            stacked = np.transpose(stacked, (2, 0, 1))
+            processed_states.append(stacked)
         
-        all_states.append(states)
+        processed_states = np.array(processed_states)
+        
+        all_states.append(processed_states)
         all_actions.append(actions)
         print(f"Loaded {states.shape[0]} steps from {os.path.basename(file_path)}")
     
@@ -104,13 +115,13 @@ def train_bc (model, trajectory_dir, num_epochs=2, batch_size=32, learning_rate=
 if __name__ == "__main__":
     model = CarRacingCNN(input_channels=12, output_actions=3)
     
-    # Train the model
+    # Train the model with better parameters
     trained_model = train_bc(
         model=model,
         trajectory_dir="trajectories",
-        batch_size=32,
-        num_epochs=5,
-        learning_rate=1e-4
+        batch_size=64,          # Increased batch size
+        num_epochs=20,          # More epochs
+        learning_rate=5e-4      # Better learning rate
     )
 
     

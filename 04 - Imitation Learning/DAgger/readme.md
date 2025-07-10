@@ -31,7 +31,7 @@ This directory contains an implementation of Behavioral Cloning (BC) for the Car
 1. Make sure all necessary dependencies are installed (e.g., Gym, PyTorch, etc.).
 2. Run the following command to watch the pretrained agent play:
 
-python play.py
+`python play.py`
 
 ### ✅ Option 2: generate trajectories, train the model and use it.
 
@@ -39,12 +39,12 @@ python play.py
 2. delete pre trained model file.
 3. Run the following command to collect trajectories:
 
-python expert.py
+`python expert.py`
 
 4. Run the following command to train the model:
 
-python train.py
+`python train.py`
 
 5. Run the following command to watch the pretrained agent play:
 
-python play.py
+`python play.py`

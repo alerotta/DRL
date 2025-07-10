@@ -34,43 +34,25 @@ def load_trajectories(trajectory_dir):
     
     for file_path in trajectory_files:
         data = np.load(file_path)
-        states = data['states']  
-        actions = data['actions']  
-        
-        # Process states: stack 4 frames and transpose to (channels, height, width)
-        processed_states = []
-        for state_sequence in states:
-            # state_sequence shape: (4, 96, 96, 3)
-            # Stack along channel dimension: (96, 96, 12)
-            stacked = np.concatenate(state_sequence, axis=-1)
-            # Transpose to (12, 96, 96) for PyTorch
-            stacked = np.transpose(stacked, (2, 0, 1))
-            processed_states.append(stacked)
-        
-        processed_states = np.array(processed_states)
-        
-        all_states.append(processed_states)
-        all_actions.append(actions)
-        print(f"Loaded {states.shape[0]} steps from {os.path.basename(file_path)}")
-    
-    # Concatenate all trajectories
+
+        all_states.append(data['states'])
+        all_actions.append(data['actions'])
+        print(f"Loaded steps from {os.path.basename(file_path)}")
+
     all_states = np.concatenate(all_states, axis=0)
     all_actions = np.concatenate(all_actions, axis=0)
-    
-    print(f"Total dataset: {all_states.shape[0]} state-action pairs")
-    print(f"States shape: {all_states.shape}")
-    print(f"Actions shape: {all_actions.shape}")
+    all_states = all_states / 255.0
     
     return all_states, all_actions
 
-def train_bc (model, trajectory_dir, num_epochs=2, batch_size=32, learning_rate=1e-4):
+def train_bc (model, trajectory_dir, num_epochs=20, batch_size=32, learning_rate=1e-4):
 
     states, actions = load_trajectories(trajectory_dir)
 
     train_dataset = TrajectoryDataset(states, actions)
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
 
-    optimizer = optim.Adam(model.parameters(), lr= learning_rate)
+    optimizer = optim.Adam(model.parameters(), lr=learning_rate)
     criterion = nn.MSELoss() #loss function 
 
     print(f"Training on {len(train_dataset)} samples")
@@ -113,6 +95,7 @@ def train_bc (model, trajectory_dir, num_epochs=2, batch_size=32, learning_rate=
     return model
 
 if __name__ == "__main__":
+
     model = CarRacingCNN(input_channels=12, output_actions=3)
     
     # Train the model with better parameters
@@ -123,5 +106,7 @@ if __name__ == "__main__":
         num_epochs=20,          # More epochs
         learning_rate=5e-4      # Better learning rate
     )
+
+
 
     

@@ -14,12 +14,9 @@ if __name__ == "__main__" :
 
     pygame.init()
     clock = pygame.time.Clock()
+    frame_count = 0
 
     frame_buffer = deque(maxlen=4)
-    processed_frame = state.astype(np.float32) / 255.0  
-    for _ in range(4):
-        frame_buffer.append(processed_frame)
-    
 
     model = CarRacingCNN(12,3)
     model.load_state_dict(torch.load(PATH, weights_only=True))
@@ -32,27 +29,23 @@ if __name__ == "__main__" :
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_ESCAPE:
+                    running = False
         
-        stacked_frames = np.concatenate(frame_buffer, axis=-1)
-        stacked_frames = np.transpose(stacked_frames, (2, 0, 1))
-        input_tensor = torch.FloatTensor(stacked_frames).unsqueeze(0) 
+        state = state / 255.0
+        state = torch.FloatTensor(state)
+        frame_buffer.append(state)
 
-        with torch.no_grad():
-            action_tensor = model(input_tensor)
-            action = action_tensor.squeeze(0).numpy()  
-
-        state,_,terminated,truncated,_ = env.step(action)
-        processed_frame = state.astype(np.float32) / 255.0
-        frame_buffer.append(processed_frame)
-
-        # Reset environment when episode ends
-        if terminated or truncated:
-            state, _ = env.reset()
-            processed_frame = state.astype(np.float32) / 255.0
-            frame_buffer.clear()
-            for _ in range(4):
-                frame_buffer.append(processed_frame)
-
+        if  frame_count > 40:
+            with torch.no_grad():
+                input_tensor = torch.stack(list(frame_buffer)).unsqueeze(0)
+                action = model(input_tensor)
+                action = action.detach().numpy().squeeze() 
+                print (action)
+                state, _ , _ ,_ ,_ = env.step(action)
+            
+        frame_count += 1
         clock.tick(30)
 
     env.close()

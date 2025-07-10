@@ -1,4 +1,4 @@
-# Behavioral Cloning Implementation
+# Behavioral Cloning DAgger Implementation
 
 This directory contains an implementation of Behavioral Cloning (BC) for the CarRacing-v3 environment from OpenAI Gym.
 
@@ -40,6 +40,10 @@ This directory contains an implementation of Behavioral Cloning (BC) for the Car
 3. Run the following command to collect trajectories:
 
 `python expert.py`
+
+### Note
+
+this is the same as bc, for now the Data Aggregation is not implemented.
 
 4. Run the following command to train the model:
 

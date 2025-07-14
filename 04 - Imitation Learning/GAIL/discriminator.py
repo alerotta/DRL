@@ -41,8 +41,9 @@ class Discriminator (nn.Module):
         return combined
     
     def reward (self,state,action):
-        logits = self.forward(state,action)
-        return -F.logsigmoid(-logits)
+        with torch.no_grad() :
+            logits = self.forward(state,action)
+            return -F.logsigmoid(-logits)
 
 
 

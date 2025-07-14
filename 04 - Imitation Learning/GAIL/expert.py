@@ -40,7 +40,6 @@ if __name__ == '__main__' :
 
     
     trajectory = []
-    frame_buffer = deque(maxlen=4)
 
     # environment init
     env = gym.make("CarRacing-v3", render_mode='human', lap_complete_percent=1.0 )
@@ -67,7 +66,7 @@ if __name__ == '__main__' :
                 if event.key == pygame.K_r:
 
                     obsv, info = env.reset()
-                    frame_buffer.clear()
+                    
                     trajectory = []
                     total_reward = 0.0
                     frame_count = 0
@@ -83,31 +82,22 @@ if __name__ == '__main__' :
             print(f"Saved trajectory with {len(states)} steps to {filename}")
 
             obsv, info = env.reset()
-            frame_buffer.clear()
             trajectory = []
             total_reward = 0.0
             frame_count = 0
 
-        
-        
         action = keys_to_action()
-        frame_buffer.append(obsv)
-        obsv , reward , is_done , is_trunc , _ = env.step(action)
-        frame_count += 1
-
-      
-
         #start to collect the trajectory after the first 40 frames, they do not contain useful info.
         if  frame_count > 40:
-            trajectory.append([list(frame_buffer), action])
+            trajectory.append([obsv, action])
+
+        obsv , reward , is_done , is_trunc , _ = env.step(action)
+        frame_count += 1
 
       
         
 
         total_reward += float(reward)
-
-
-        
 
 
         clock.tick(30)

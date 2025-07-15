@@ -1,15 +1,30 @@
-import gymnasium as gym
-from environment import GAILWrapper
-from discriminator import Discriminator
-from stable_baselines3 import PPO
+import numpy as np
+import os 
+import glob 
+import matplotlib.pyplot as plt
 
-if __name__ == "__main__":
-    disc = Discriminator (3,3)
-    env = gym.make("CarRacing-v3")
-    w_env = GAILWrapper(env,disc)
-    state , info = w_env.reset()
-    model = PPO("MlpPolicy",w_env)
+DIR = "trajectories"
+
+if __name__ == "__main__" :
     
+    
+    trajectory_file = glob.glob(os.path.join(DIR, "*.npz"))
+    print(trajectory_file)
+    data = np.load(trajectory_file[0])
+    states = data['states']  
+    actions = data['actions']  
+
+    print (f"there are {len(states)} states and {len(actions)} actions")
+    print(f"Shape of a states entry: {states[0].shape}")
+        
+    first_frame = states[0][0] 
+
+    plt.figure(figsize=(8, 8))
+    plt.imshow(first_frame.astype(np.uint8))
+    plt.title("First frame of the first state")
+    plt.axis('off')
+    plt.show()
+
 
     
     

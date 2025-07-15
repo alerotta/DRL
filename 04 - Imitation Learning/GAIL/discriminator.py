@@ -5,14 +5,14 @@ import gymnasium as gym
 
 class Discriminator (nn.Module):
     
-    def __init__(self,input_channels_img = 3 ,input_channels_action = 3):
+    def __init__(self,input_channels_img = 12 ,input_channels_action = 3):
 
         super(Discriminator, self).__init__()
         self.conv1 = nn.Conv2d(input_channels_img,32, kernel_size= 8 , stride= 4 )
         self.conv2 = nn.Conv2d(32,64, kernel_size= 4 , stride= 2 )
         self.conv3 = nn.Conv2d(64,64, kernel_size= 3 , stride= 1 )
 
-        # Calculate correct output size: 96 -> 23 -> 10 -> 8
+        
         out_conv_size = 8 * 8 * 64  # 4096
 
         self.lin = nn.Linear(input_channels_action, 128)
@@ -23,7 +23,11 @@ class Discriminator (nn.Module):
 
     def forward(self, state, action ):
 
-        x = F.relu(self.conv1(state))
+        # Reshape from (B, 4, 3, 96, 96) to (B, 12, 96, 96)
+        # This flattens the 4 frames × 3 RGB channels into 12 channels
+        x = state.contiguous().view(state.size(0), -1, 96, 96)
+
+        x = F.relu(self.conv1(x))
         x = F.relu(self.conv2(x))
         x = F.relu(self.conv3(x))
         action = F.relu(self.lin(action))

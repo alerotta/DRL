@@ -1,32 +1,23 @@
 import numpy as np
+import glob
 import os 
-import glob 
-import matplotlib.pyplot as plt
+from environment import EnvWrapper
+from discriminator import Discriminator
+import gymnasium as gym
 
-DIR = "trajectories"
+if __name__ == "__main__":
 
-if __name__ == "__main__" :
-    
-    
-    trajectory_file = glob.glob(os.path.join(DIR, "*.npz"))
-    print(trajectory_file)
-    data = np.load(trajectory_file[0])
-    states = data['states']  
-    actions = data['actions']  
+    files =  glob.glob(os.path.join("trajectories" , "*npz"))
 
-    print (f"there are {len(states)} states and {len(actions)} actions")
-    print(f"Shape of a states entry: {states[0].shape}")
-        
-    first_frame = states[0][0] 
+    data = np.load(files[0])
+    states = data["states"]
+    actions = data["actions"]
 
-    plt.figure(figsize=(8, 8))
-    plt.imshow(first_frame.astype(np.uint8))
-    plt.title("First frame of the first state")
-    plt.axis('off')
-    plt.show()
+    print(f"len: {len(actions)}, first action: {actions[0]}, shape: states {states[0].shape} actions {actions[0].shape}")
 
+    disc = Discriminator()
+    real_env  = gym.make("CarRacing-v3", render_mode = "human")
 
-    
-    
-
-    
+    w_env = EnvWrapper(real_env,disc)
+    action = w_env.action_space.sample()
+    w_env.step(action)

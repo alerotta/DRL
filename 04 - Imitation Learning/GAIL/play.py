@@ -23,21 +23,20 @@ if __name__ == "__main__":
 
     
     while running: 
+
+
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_ESCAPE:
+                    running = False
+
                 
             
         action, _ = model.predict(obs)
-        
-
-        
-        print(f"Action: {action}, Type: {type(action)}, Shape: {action.shape}")
         obs, reward, done, truncated, info = env.step(action)
             
-
-
-       
             
            
         clock.tick(30)  # 30 FPS

@@ -1,5 +1,0 @@
-gymnasium[box2d]
-pygame
-numpy
-Box2D
-

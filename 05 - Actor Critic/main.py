@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 
+
 import gymnasium as gym 
 import numpy as np
 
@@ -10,125 +11,130 @@ from dataclasses import dataclass
 
 import typing as tt
 
+GAMMA = 0.99
+
 @dataclass
 class Step : 
-    obs : np.array
+    obs : torch.Tensor
     action : int 
     reward : float
     done : bool
-    value : float
-    log_prob : float  
+    value : torch.Tensor
+    log_prob : torch.Tensor 
 
 
-@dataclass 
-class Rollout: 
-    steps : tt.List[Step]
+def collect_rollout ( env : gym.Env , net : MultiHeadNetwork , rollout_size : int ):
 
-
-def collect_rollout ( env: gym.Env , net: MultiHeadNetwork , rollout_length: int ):
-    obs ,  _ = env.reset()
-    steps = []
-    net.eval()
+    rollout = []
+    obs , _ = env.reset()
+    
     with torch.no_grad():
-        for  _ in range(rollout_length):
-            # Create tensor correctly
-            obs_tensor = torch.as_tensor(obs, dtype=torch.float32)
+        for _ in range(rollout_size):
 
-            action_logits , value = net(obs_tensor)
-            dist = torch.distributions.Categorical(logits=action_logits)
+            obs_tensor = torch.as_tensor(obs, dtype=torch.float32)
+            logits, value = net(obs_tensor)
+            dist = torch.distributions.Categorical(logits=logits)
             action_t = dist.sample()
-            log_prob_t = dist.log_prob(action_t)
+            log_prob = dist.log_prob(action_t)
 
             action = int(action_t.item())
-            next_obs , reward, is_done, is_trunc , _ = env.step(action)
+            next_obs, reward , is_done , is_trunc , _ = env.step(action)
             done = bool(is_done or is_trunc)
-
-            # Store numpy obs and scalar values to make stacking easy later
-            steps.append(
-                Step(
-                    obs=np.array(obs, copy=True),
-                    action=action,
-                    reward=float(reward),
-                    done=done,
-                    value=float(value.item()),
-                    log_prob=float(log_prob_t.item()),
-                )
-            )
-
+            step = Step(obs_tensor,action,float(reward),done,value,log_prob)
+            rollout.append(step)
             obs = next_obs
             if done : 
-                obs ,  _ = env.reset()
-
-    last_value = float(net(torch.as_tensor(obs, dtype=torch.float32))[1].item())
-    return Rollout(steps=steps), obs, last_value
-
-
-def train (env: gym.Env ,
-            net: MultiHeadNetwork, 
-            optimizer : optim.Optimizer,
-            rollout_length : int = 128, 
-            gamma: float = 0.99,
-            entropy_coef: float = 0.01,
-            value_coef: float = 0.5,
-            max_grad_norm: float = 0.5,
-            updates: int = 1000) : 
+                obs , _ = env.reset()
     
-    for update in range (updates):
-        rollout , _ ,last_value = collect_rollout(env,net,rollout_length)
+        last_step = rollout[-1]
+        if last_step.done : 
+            last_value = torch.tensor(0.0)
+        else :
+            obs_tensor = torch.as_tensor(obs, dtype=torch.float32)
+            _, last_value = net(obs_tensor)
+ 
+    return rollout , last_value
 
-        # Stack rollout
-        obs_batch = torch.as_tensor(np.stack([s.obs for s in rollout.steps]), dtype=torch.float32)
-        actions = torch.as_tensor([s.action for s in rollout.steps], dtype=torch.int64)
-        rewards = torch.as_tensor([s.reward for s in rollout.steps], dtype=torch.float32)
-        dones = torch.as_tensor([s.done for s in rollout.steps], dtype=torch.float32)
 
-        returns = torch.empty(rollout_length, dtype=torch.float32)
-        next_ret = torch.as_tensor(last_value, dtype=torch.float32)
 
-        for t in reversed(range(rollout_length)):
-            next_ret = rewards[t] + gamma * next_ret * (1.0 - dones[t])
-            returns[t] = next_ret
 
-        net.train()
-        logits, values = net(obs_batch)              # logits: [B, A], values: [B]
+def calculate_targets (rollout : tt.List[Step], last_value : torch.Tensor ) : 
+
+    targets = []
+
+    for i, step in enumerate(rollout):
+        if step.done:
+            target = torch.as_tensor(step.reward, dtype=torch.float32)
+        elif i == len(rollout) - 1:
+            target = torch.as_tensor(step.reward, dtype=torch.float32) + GAMMA * last_value
+        else:
+            target = torch.as_tensor(step.reward, dtype=torch.float32) + GAMMA * rollout[i+1].value
+        # Ensure target is always shape [1]
+        target = target.reshape(1)
+        targets.append(target)
+    return torch.stack(targets)
+
+def calculate_advantages (rollout : tt.List[Step] , targets :  torch.Tensor):
+
+    adv = torch.zeros_like(targets)
+    for i,step in enumerate(rollout):
+        adv[i] = targets[i] - torch.as_tensor(step.value, dtype=torch.float32)
+    return adv
+
+
+def train (env : gym.Env,
+        net : MultiHeadNetwork,
+        optimizer : torch.optim.Optimizer,
+        rollout_size : int,
+        n_updates : int,
+        value_coef: float = 0.5,
+        entropy_coef: float = 0.01
+):
+    for update in range(n_updates):
+        
+        rollout , last_val = collect_rollout(env,net,rollout_size)
+        targets = calculate_targets(rollout,last_val)
+        adv = calculate_advantages(rollout,targets)
+
+        obs_batch = torch.stack([step.obs for step in rollout])
+        action_batch = torch.tensor([step.action for step in rollout])
+        log_prob_batch = torch.stack([step.log_prob for step in rollout])
+        value_batch = torch.stack([step.value for step in rollout]).squeeze(-1)
+
+        logits, values = net(obs_batch)
         dist = torch.distributions.Categorical(logits=logits)
-        log_probs = dist.log_prob(actions)           # [B]
+        new_log_probs = dist.log_prob(action_batch)
         entropy = dist.entropy().mean()
 
-        advantages = returns - values.detach()
-        advantages = (advantages - advantages.mean()) / (advantages.std(unbiased=False) + 1e-8)
+        policy_loss = -(adv.detach().squeeze() * new_log_probs).mean()
+        value_loss = value_coef * (targets.squeeze() - values.squeeze()).pow(2).mean()
+        entropy_loss = -entropy_coef * entropy
+        loss = policy_loss + value_loss + entropy_loss
 
-        policy_loss = -(advantages * log_probs).mean()
-        value_loss = 0.5 * (returns - values).pow(2).mean()
-        loss = policy_loss + value_coef * value_loss - entropy_coef * entropy
-
-        optimizer.zero_grad(set_to_none=True)
+        optimizer.zero_grad()
         loss.backward()
-        torch.nn.utils.clip_grad_norm_(net.parameters(), max_grad_norm)
         optimizer.step()
-
         if (update + 1) % 10 == 0:
-            print(f"update {update+1}: loss={loss.item():.3f} "
-                  f"policy={policy_loss.item():.3f} value={value_loss.item():.3f} "
-                  f"entropy={entropy.item():.3f} avg_r={rewards.mean().item():.2f}")
+            print(f"Update {update+1}/{n_updates}, Loss: {loss.item():.3f}, Policy Loss: {policy_loss.item():.3f}, Value Loss: {value_loss.item():.3f}, Entropy: {entropy.item():.3f}")
+
+
+
+
+if __name__ == "__main__" : 
+
+    env = gym.make("LunarLander-v3")
+    net = MultiHeadNetwork(8,4)
+    optimizer = optim.Adam(net.parameters(), lr=1e-3)
+    train(env, net, optimizer, rollout_size=200, n_updates=1000)
+
+
+
+ 
+
+
+
+
             
-if __name__ == "__main__":
-    env = gym.make("CartPole-v1")
-    obs_dim = env.observation_space.shape[0]
-    n_actions = env.action_space.n
-    net = MultiHeadNetwork(obs_dim, n_actions)
-    optimizer = torch.optim.Adam(net.parameters(), lr=3e-4)
-    train(env, net, optimizer, rollout_length=128, updates=500)
 
-
-
-    
-
-        
-
-
-
-
-
-
+            
 
